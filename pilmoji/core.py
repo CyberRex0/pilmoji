@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from optparse import Option
 
 from PIL import Image, ImageDraw, ImageFont
 from typing import Dict, Optional, SupportsInt, TYPE_CHECKING, Tuple, Type, TypeVar, Union
@@ -84,6 +85,7 @@ class Pilmoji:
         self._default_emoji_position_offset: Tuple[int, int] = emoji_position_offset
 
         self._emoji_cache: Dict[str, BytesIO] = {}
+        self._fedi_emoji_cache: Dict[str, BytesIO] = {}
         self._discord_emoji_cache: Dict[int, BytesIO] = {}
 
         self._create_draw()
@@ -173,6 +175,20 @@ class Pilmoji:
             stream.seek(0)
             return stream
 
+    def _get_fedi_emoji(self, url: str, /) -> Optional[BytesIO]:
+
+        if self._cache and url in self._fedi_emoji_cache:
+            entry = self._fedi_emoji_cache[url]
+            entry.seek(0)
+            return entry
+
+        if stream := self.source.get_fedi_emoji(url):
+            if self._cache:
+                self._fedi_emoji_cache[url] = stream
+
+            stream.seek(0)
+            return stream
+
     def getsize(
         self,
         text: str,
@@ -218,6 +234,7 @@ class Pilmoji:
         stroke_fill: ColorT = None,
         embedded_color: bool = False,
         *args,
+        emojis: list = None,
         emoji_scale_factor: float = None,
         emoji_position_offset: Tuple[int, int] = None,
         **kwargs
@@ -280,7 +297,7 @@ class Pilmoji:
 
         x, y = xy
         original_x = x
-        nodes = to_nodes(text)
+        nodes = to_nodes(text, emojis=emojis)
 
         for line in nodes:
             x = original_x
@@ -300,6 +317,9 @@ class Pilmoji:
 
                 elif self._render_discord_emoji and node.type is NodeType.discord_emoji:
                     stream = self._get_discord_emoji(content)
+
+                elif node.type is NodeType.fedi_emoji:
+                    stream = self._get_fedi_emoji(content)
 
                 if not stream:
                     self.draw.text((x, y), content, *args, **kwargs)

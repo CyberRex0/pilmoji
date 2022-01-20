@@ -15,8 +15,9 @@ if TYPE_CHECKING:
 # This is actually way faster than it seems
 _UNICODE_EMOJI_REGEX = '|'.join(map(re.escape, sorted(EMOJI_UNICODE['en'].values(), key=len, reverse=True)))
 _DISCORD_EMOJI_REGEX = '<a?:[a-zA-Z0-9_]{2,32}:[0-9]{17,22}>'
+_FEDI_EMOJI_REGEX = ':[a-zA-Z0-9_]+:'
 
-EMOJI_REGEX: Final[re.Pattern[str]] = re.compile(f'({_UNICODE_EMOJI_REGEX}|{_DISCORD_EMOJI_REGEX})')
+EMOJI_REGEX: Final[re.Pattern[str]] = re.compile(f'({_UNICODE_EMOJI_REGEX}|{_DISCORD_EMOJI_REGEX}|{_FEDI_EMOJI_REGEX})')
 
 __all__ = (
     'EMOJI_REGEX',
@@ -40,11 +41,14 @@ class NodeType(Enum):
         This node is a unicode emoji.
     discord_emoji
         This node is a Discord emoji.
+    fedi_emoji
+        This node is a Fediverse emoji.
     """
 
     text          = 0
     emoji         = 1
     discord_emoji = 2
+    fedi_emoji    = 3
 
 
 class Node(NamedTuple):
@@ -65,18 +69,30 @@ class Node(NamedTuple):
         return f'<Node type={self.type.name!r} content={self.content!r}>'
 
 
-def _parse_line(line: str, /) -> List[Node]:
+def _parse_line(line: str, /, emojis: list = []) -> List[Node]:
     nodes = []
 
     for i, chunk in enumerate(EMOJI_REGEX.split(line)):
+        print(i, chunk)
         if not chunk:
             continue
 
         if not i % 2:
             nodes.append(Node(NodeType.text, chunk))
             continue
-
-        if len(chunk) > 18:  # This is guaranteed to be a Discord emoji
+        print(chunk)
+        # fedi emojiであるかどうかチェックする
+        if chunk.startswith(':') and chunk.endswith(':'):
+            emoji_name = chunk.replace(':', '')
+            for e in emojis:
+                if e['name'] == emoji_name:
+                    # 存在するならノード変換
+                    node = Node(NodeType.fedi_emoji, e['url'])
+                    break
+            else:
+                # 存在しない場合テキスト扱い
+                node = Node(NodeType.text, chunk)
+        elif len(chunk) > 18:  # This is guaranteed to be a Discord emoji
             node = Node(NodeType.discord_emoji, chunk.split(':')[-1][:-1])
         else:
             node = Node(NodeType.emoji, chunk)
@@ -86,7 +102,7 @@ def _parse_line(line: str, /) -> List[Node]:
     return nodes
 
 
-def to_nodes(text: str, /) -> List[List[Node]]:
+def to_nodes(text: str, /, emojis: list = []) -> List[List[Node]]:
     """Parses a string of text into :class:`~.Node`s.
 
     This method will return a nested list, each element of the list
@@ -104,7 +120,7 @@ def to_nodes(text: str, /) -> List[List[Node]]:
     -------
     List[List[:class:`~.Node`]]
     """
-    return [_parse_line(line) for line in text.splitlines()]
+    return [_parse_line(line, emojis=emojis) for line in text.splitlines()]
 
 
 def getsize(
