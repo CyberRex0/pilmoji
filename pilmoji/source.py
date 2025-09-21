@@ -17,6 +17,7 @@ except ImportError:
 __all__ = (
     'BaseSource',
     'HTTPBasedSource',
+    'FediEmojiSourceMixin',
     'DiscordEmojiSourceMixin',
     'EmojiCDNSource',
     'TwitterEmojiSource',
@@ -129,6 +130,24 @@ class HTTPBasedSource(BaseSource):
     def get_discord_emoji(self, id: int, /) -> Optional[BytesIO]:
         raise NotImplementedError
 
+class FediEmojiSourceMixin(HTTPBasedSource):
+
+    @abstractmethod
+    def get_emoji(self, emoji: str, /) -> Optional[BytesIO]:
+        raise NotImplementedError
+    
+    @abstractmethod
+    def get_discord_emoji(self, id: int, /) -> Optional[BytesIO]:
+        raise NotImplementedError
+    
+    def get_fedi_emoji(self, url: dict, /) -> Optional[BytesIO]:
+
+        _to_catch = HTTPError if not _has_requests else requests.HTTPError
+
+        try:
+            return BytesIO(self.request(url))
+        except _to_catch:
+            pass
 
 class DiscordEmojiSourceMixin(HTTPBasedSource):
     """A mixin that adds Discord emoji functionality to another source."""

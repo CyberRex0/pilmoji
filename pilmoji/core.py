@@ -87,6 +87,7 @@ class Pilmoji:
 
         self._emoji_cache: Dict[str, BytesIO] = {}
         self._discord_emoji_cache: Dict[int, BytesIO] = {}
+        self._fedi_emoji_cache: Dict[str, BytesIO] = {}
 
         self._create_draw()
 
@@ -136,6 +137,9 @@ class Pilmoji:
 
             for stream in self._discord_emoji_cache.values():
                 stream.close()
+            
+            for stream in self._fedi_emoji_cache.values():
+                stream.close()
 
             self._emoji_cache = {}
             self._discord_emoji_cache = {}
@@ -171,6 +175,20 @@ class Pilmoji:
         if stream := self.source.get_discord_emoji(id):
             if self._cache:
                 self._discord_emoji_cache[id] = stream
+
+            stream.seek(0)
+            return stream
+    
+    def _get_fedi_emoji(self, url: str, /) -> Optional[BytesIO]:
+
+        if self._cache and url in self._fedi_emoji_cache:
+            entry = self._fedi_emoji_cache[url]
+            entry.seek(0)
+            return entry
+
+        if stream := self.source.get_fedi_emoji(url):
+            if self._cache:
+                self._fedi_emoji_cache[url] = stream
 
             stream.seek(0)
             return stream
@@ -236,6 +254,7 @@ class Pilmoji:
         stroke_fill: ColorT = None,
         embedded_color: bool = False,
         *args,
+        emojis: list = [],
         emoji_scale_factor: float = None,
         emoji_position_offset: Tuple[int, int] = None,
         **kwargs
@@ -313,7 +332,8 @@ class Pilmoji:
 
         x, y = xy
         original_x = x
-        nodes = to_nodes(text)
+        # TODO: fix Fedi emoji source
+        nodes = to_nodes(text, emojis=[])
         # get the distance between lines ( will be add to y between each line )
         line_spacing = self._multiline_spacing(font, spacing, stroke_width)
 
@@ -340,6 +360,9 @@ class Pilmoji:
 
                 elif self._render_discord_emoji and node.type is NodeType.discord_emoji:
                     stream = self._get_discord_emoji(content)
+
+                elif node.type is NodeType.fedi_emoji:
+                    stream = self._get_fedi_emoji(content)
                 
                 if stream:
                     streams[node_id][line_id] = stream
